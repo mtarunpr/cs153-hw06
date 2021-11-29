@@ -8,8 +8,8 @@ open Datastructures
    analysis than the abstract syntax defined in Ll.fdecl
 
    - a cfg has:
-         blocks - a map of labels to  Ll basic block, and
-         preds  - a set of labels containing the blocks predecessors           
+         blocks - maps from label to Ll basic block, and
+         preds  - maps from label to the set of labels containing the block's predecessors           
          ret_ty - the Ll return type of the function
          args   - a list of function parameters with their types
 

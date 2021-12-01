@@ -98,8 +98,17 @@ module Fact =
        It may be useful to define a helper function that knows how to take the
        meet of two SymPtr.t facts.
     *)
-    let combine (ds:fact list) : fact =
-      failwith "Alias.Fact.combine not implemented"
+    let combine (ds : fact list) : fact =
+      let combine' (d1 : fact) (d2 : fact) : fact =
+        let f _ sp_opt1 sp_opt2 =
+          match sp_opt1, sp_opt2 with
+          | Some sp1, Some sp2 -> if SymPtr.compare sp1 sp2 < 0 then sp_opt2 else sp_opt1
+          | Some sp, None | None, Some sp -> Some sp
+          | None, None -> None
+        in
+        UidM.merge f d1 d2
+      in
+      List.fold_left combine' (List.hd ds) (List.tl ds)
   end
 
 (* instantiate the general framework ---------------------------------------- *)

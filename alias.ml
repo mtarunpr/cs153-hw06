@@ -33,8 +33,38 @@ type fact = SymPtr.t UidM.t
    - Other instructions do not define pointers
 
  *)
-let insn_flow ((u,i):uid * insn) (d:fact) : fact =
-  failwith "Alias.insn_flow unimplemented"
+let insn_flow ((u, i) : uid * insn) (d : fact) : fact =
+  match i with
+  | Alloca _ -> UidM.add u SymPtr.Unique d
+  | Load (Ptr (Ptr _), _) -> UidM.add u SymPtr.MayAlias d
+  | Call (ret_ty, _, args) ->
+    let f d (ty, Id arg) =
+      match ty with
+      | Ptr _ -> UidM.add arg SymPtr.MayAlias d
+      | _ -> d
+    in
+    let d =
+      match ret_ty with
+      | Ptr _ -> UidM.add u SymPtr.MayAlias d
+      | _ -> UidM.add u SymPtr.UndefAlias d
+    in
+    List.fold_left f d args
+  | Bitcast (ty1, Id id, ty2) ->
+    let d =
+      match ty1 with
+      | Ptr _ -> UidM.add id SymPtr.MayAlias d
+      | _ -> d
+    in
+    let d =
+      match ty2 with
+      | Ptr _ -> UidM.add u SymPtr.MayAlias d
+      | _ -> UidM.add u SymPtr.UndefAlias d
+    in d
+  | Gep (Ptr _, Id id, idxs) -> 
+    UidM.add u SymPtr.MayAlias (UidM.add id SymPtr.MayAlias d)
+  | Store (Ptr _, Id id, _) ->
+      UidM.add id SymPtr.MayAlias d
+  | _ -> UidM.add u SymPtr.UndefAlias d
 
 
 (* The flow function across terminators is trivial: they never change alias info *)

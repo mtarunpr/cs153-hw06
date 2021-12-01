@@ -46,7 +46,7 @@ let insn_flow ((u, i) : uid * insn) (d : fact) : fact =
     let d =
       match ret_ty with
       | Ptr _ -> UidM.add u SymPtr.MayAlias d
-      | _ -> UidM.add u SymPtr.UndefAlias d
+      | _ -> d
     in
     List.fold_left f d args
   | Bitcast (ty1, Id id, ty2) ->
@@ -58,13 +58,13 @@ let insn_flow ((u, i) : uid * insn) (d : fact) : fact =
     let d =
       match ty2 with
       | Ptr _ -> UidM.add u SymPtr.MayAlias d
-      | _ -> UidM.add u SymPtr.UndefAlias d
+      | _ -> d
     in d
   | Gep (Ptr _, Id id, idxs) -> 
     UidM.add u SymPtr.MayAlias (UidM.add id SymPtr.MayAlias d)
   | Store (Ptr _, Id id, _) ->
       UidM.add id SymPtr.MayAlias d
-  | _ -> UidM.add u SymPtr.UndefAlias d
+  | _ -> d
 
 
 (* The flow function across terminators is trivial: they never change alias info *)
@@ -108,6 +108,7 @@ module Fact =
         in
         UidM.merge f d1 d2
       in
+      if ds = [] then UidM.empty else
       List.fold_left combine' (List.hd ds) (List.tl ds)
   end
 

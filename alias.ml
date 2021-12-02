@@ -38,9 +38,9 @@ let insn_flow ((u, i) : uid * insn) (d : fact) : fact =
   | Alloca _ -> UidM.add u SymPtr.Unique d
   | Load (Ptr (Ptr _), _) -> UidM.add u SymPtr.MayAlias d
   | Call (ret_ty, _, args) ->
-    let f d (ty, Id arg) =
-      match ty with
-      | Ptr _ -> UidM.add arg SymPtr.MayAlias d
+    let f d (ty, arg) =
+      match ty, arg with
+      | Ptr _, Id id -> UidM.add id SymPtr.MayAlias d
       | _ -> d
     in
     let d =
@@ -49,10 +49,10 @@ let insn_flow ((u, i) : uid * insn) (d : fact) : fact =
       | _ -> d
     in
     List.fold_left f d args
-  | Bitcast (ty1, Id id, ty2) ->
+  | Bitcast (ty1, op, ty2) ->
     let d =
-      match ty1 with
-      | Ptr _ -> UidM.add id SymPtr.MayAlias d
+      match ty1, op with
+      | Ptr _, Id id -> UidM.add id SymPtr.MayAlias d
       | _ -> d
     in
     let d =
@@ -60,8 +60,12 @@ let insn_flow ((u, i) : uid * insn) (d : fact) : fact =
       | Ptr _ -> UidM.add u SymPtr.MayAlias d
       | _ -> d
     in d
-  | Gep (Ptr _, Id id, idxs) -> 
-    UidM.add u SymPtr.MayAlias (UidM.add id SymPtr.MayAlias d)
+  | Gep (Ptr _, op, idxs) -> 
+    let d =
+      match op with
+      | Id id -> UidM.add id SymPtr.MayAlias d
+      | _ -> d
+    in UidM.add u SymPtr.MayAlias d
   | Store (Ptr _, Id id, _) ->
       UidM.add id SymPtr.MayAlias d
   | _ -> d

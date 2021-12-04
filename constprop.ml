@@ -72,15 +72,16 @@ let insn_flow (u, i : uid * insn) (d : fact) : fact =
   in
 
   let handle_bop_cnd ll_to_fn ll op1 op2 =
+    let find = UidM.find_or SymConst.UndefConst d in
     match op1, op2 with
     | Const c1, Const c2 ->
       UidM.add u (SymConst.Const ((ll_to_fn ll) c1 c2)) d
     | Id id, Const c ->
-      add_mapping ll_to_fn ll (UidM.find id d) (Const c)
+      add_mapping ll_to_fn ll (find id) (Const c)
     | Const c, Id id ->
-      add_mapping ll_to_fn ll (Const c) (UidM.find id d) 
+      add_mapping ll_to_fn ll (Const c) (find id) 
     | Id id1, Id id2 ->
-      add_mapping ll_to_fn ll (UidM.find id1 d) (UidM.find id2 d)
+      add_mapping ll_to_fn ll (find id1) (find id2)
     | _ -> UidM.add u SymConst.NonConst d
   in
 
@@ -159,7 +160,7 @@ let run (cg : Graph.t) (cfg : Cfg.t) : Cfg.t =
     match op with
     | Id id ->
       begin
-        match UidM.find id (cb u) with
+        match UidM.find_or UndefConst (cb u) id with
         | Const x -> Const x
         | _ -> op
       end

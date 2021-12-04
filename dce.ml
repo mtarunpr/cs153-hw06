@@ -29,7 +29,7 @@ let dce_block (lb : uid -> Liveness.Fact.t)
     | Binop _ | Alloca _ | Load _ | Icmp _ | Bitcast _ | Gep _ ->
       UidS.exists (fun x -> x = u) (lb u)
     | Store (_, _, Id id) ->
-      UidS.exists (fun x -> x = id) (lb u) || UidM.find id (ab u) = MayAlias
+      UidS.exists (fun x -> x = id) (lb u) || UidM.find_or Alias.SymPtr.UndefAlias (ab u) id = MayAlias
     | _ -> true
   in {insns=List.filter keep_insn b.insns; term=b.term}
 

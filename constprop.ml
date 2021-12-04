@@ -115,8 +115,18 @@ module Fact =
 
     (* The constprop analysis should take the meet over predecessors to compute the
        flow into a node. You may find the UidM.merge function useful *)
-    let combine (ds:fact list) : fact = 
-      failwith "Constprop.Fact.combine unimplemented"
+    let combine (ds : fact list) : fact = 
+      let combine' (d1 : fact) (d2 : fact) : fact =
+        let f _ sc_opt1 sc_opt2 =
+          match sc_opt1, sc_opt2 with
+          | Some sc1, Some sc2 -> if SymConst.compare sc1 sc2 < 0 then sc_opt2 else sc_opt1
+          | Some sc, None | None, Some sc -> Some sc
+          | None, None -> None
+        in
+        UidM.merge f d1 d2
+      in
+      if ds = [] then UidM.empty else
+      List.fold_left combine' (List.hd ds) (List.tl ds)
   end
 
 (* instantiate the general framework ---------------------------------------- *)

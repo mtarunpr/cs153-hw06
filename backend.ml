@@ -787,10 +787,12 @@ let simplify_graph (graph : graph) (stack : stack) : graph * stack =
   UidM.fold remove_node_if_needed graph (graph, stack)
 
 
-let potentially_spill (graph : graph) : Ll.uid =
-  (* TODO: use metric to decide which node to spill instead of arbitrarilty choosing *)
-  (* no need to check if graph is empty since we do that in simplify_and_spill_loop *)
-  fst (Datastructures.UidM.find_first (fun _ -> true) graph)
+let potentially_spill (graph : graph) : Ll.uid option =
+  let open Datastructures in
+  if not (UidM.is_empty graph) then
+    (* TODO: use metric to decide which node to spill instead of arbitrarilty choosing *)
+    Some (fst (UidM.find_first (fun _ -> true) graph))
+  else None
 
 let pick_loc (graph : graph) (layout_map : layout_map) (potentially_spilled_uids : UidSet.t) (u : Ll.uid) (next_stk_slot : int) : Alloc.loc =
   let open Datastructures in
@@ -815,8 +817,9 @@ let better_layout (f : Ll.fdecl) (live : liveness) : layout =
     if UidM.is_empty graph then stack, potentially_spilled_uids
     else
       let graph, stack = simplify_graph graph stack in
-      let uid = potentially_spill graph in
-      simplify_and_spill_loop graph (uid :: stack) (UidSet.add uid potentially_spilled_uids)
+      match potentially_spill graph with
+      | None -> stack, potentially_spilled_uids
+      | Some uid -> simplify_and_spill_loop graph (uid :: stack) (UidSet.add uid potentially_spilled_uids)
   in
 
   let graph = build_graph f live in

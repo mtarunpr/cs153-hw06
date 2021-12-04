@@ -152,14 +152,47 @@ let analyze (g:Cfg.t) : Graph.t =
 (* run constant propagation on a cfg given analysis results ----------------- *)
 (* HINT: your cp_block implementation will probably rely on several helper 
    functions.                                                                 *)
-let run (cg:Graph.t) (cfg:Cfg.t) : Cfg.t =
+let run (cg : Graph.t) (cfg : Cfg.t) : Cfg.t =
   let open SymConst in
-  
 
-  let cp_block (l:Ll.lbl) (cfg:Cfg.t) : Cfg.t =
+  let get_op_repl (cb : Ll.uid -> Fact.t) (u : Ll.uid) (op : Ll.operand) : Ll.operand =
+    match op with
+    | Id id ->
+      begin
+        match UidM.find id (cb u) with
+        | Const x -> Const x
+        | _ -> op
+      end
+    | _ -> op
+  in
+  
+  let cp_insn (cb : Ll.uid -> Fact.t) (u, i : Ll.uid * Ll.insn) : Ll.uid * Ll.insn =
+    let get_op_repl' = get_op_repl cb u in
+    u,
+    match i with
+    | Binop (bop, ty, op1, op2) -> Binop (bop, ty, get_op_repl' op1, get_op_repl' op2)
+    | Alloca _ -> i
+    | Load (ty, op) -> Load (ty, get_op_repl' op)
+    | Store (ty, op1, op2) -> Store (ty, get_op_repl' op1, get_op_repl' op2)
+    | Icmp (cnd, ty, op1, op2) -> Icmp (cnd, ty, get_op_repl' op1, get_op_repl' op2)
+    | Call (ty, op, args) -> Call (ty, get_op_repl' op, List.map (fun (t, arg) -> (t, get_op_repl' arg)) args)
+    | Bitcast (ty1, op, ty2) -> Bitcast (ty1, get_op_repl' op, ty2)
+    | Gep (ty, op, idxs) -> Gep (ty, get_op_repl' op, List.map get_op_repl' idxs)
+  in
+
+  let cp_term (cb : Ll.uid -> Fact.t) (u, term : Ll.uid * Ll.terminator) : Ll.uid * Ll.terminator =
+    let get_op_repl' = get_op_repl cb u in
+    u,
+    match term with
+    | Ret (ty, Some op) -> Ret (ty, Some (get_op_repl' op))
+    | Cbr (op, lbl1, lbl2) -> Cbr (get_op_repl' op, lbl1, lbl2)
+    | _ -> term
+  in
+
+  let cp_block (l : Ll.lbl) (cfg : Cfg.t) : Cfg.t =
     let b = Cfg.block cfg l in
     let cb = Graph.uid_out cg l in
-    failwith "Constprop.cp_block unimplemented"
+    Cfg.add_block l {insns=(List.map (cp_insn cb) b.insns); term=cp_term cb b.term} cfg
   in
 
   LblS.fold cp_block (Cfg.nodes cfg) cfg

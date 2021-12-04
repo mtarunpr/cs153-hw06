@@ -21,10 +21,17 @@ open Datastructures
 
    Hint: Consider using List.filter
  *)
-let dce_block (lb:uid -> Liveness.Fact.t) 
-              (ab:uid -> Alias.fact)
-              (b:Ll.block) : Ll.block =
-  failwith "Dce.dce_block unimplemented"
+let dce_block (lb : uid -> Liveness.Fact.t) 
+              (ab : uid -> Alias.fact)
+              (b : Ll.block) : Ll.block =
+  let keep_insn ((u, i) : uid * insn) : bool =
+    match i with
+    | Binop _ | Alloca _ | Load _ | Icmp _ | Bitcast _ | Gep _ ->
+      UidS.exists (fun x -> x = u) (lb u)
+    | Store (_, _, Id id) ->
+      UidS.exists (fun x -> x = id) (lb u) || UidM.find id (ab u) = MayAlias
+    | _ -> true
+  in {insns=List.filter keep_insn b.insns; term=b.term}
 
 let run (lg:Liveness.Graph.t) (ag:Alias.Graph.t) (cfg:Cfg.t) : Cfg.t =
 

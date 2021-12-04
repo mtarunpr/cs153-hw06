@@ -36,8 +36,61 @@ type fact = SymConst.t UidM.t
    - Uid of stores and void calls are UndefConst-out
    - Uid of all other instructions are NonConst-out
  *)
-let insn_flow (u,i:uid * insn) (d:fact) : fact =
-  failwith "Constprop.insn_flow unimplemented"
+let bop_to_fn (bop : Ll.bop) =
+  let int_to_int64_arg f =
+    fun x y -> f x (Int64.to_int y)
+  in
+  match bop with
+  | Add -> Int64.add
+  | Sub -> Int64.sub
+  | Mul -> Int64.mul
+  | Shl -> int_to_int64_arg Int64.shift_left
+  | Lshr -> int_to_int64_arg Int64.shift_right_logical
+  | Ashr -> int_to_int64_arg Int64.shift_right
+  | And -> Int64.logand
+  | Or -> Int64.logor
+  | Xor -> Int64.logxor
+
+let cnd_to_fn (cnd : Ll.cnd) =
+  let fn =
+    match cnd with
+    | Eq -> (=)
+    | Ne -> (<>)
+    | Slt -> (<)
+    | Sle ->  (<=)
+    | Sgt -> (>)
+    | Sge -> (>=)
+  in
+  fun x y -> if fn (Int64.compare x y) 0 then 1L else 0L
+
+let insn_flow (u, i : uid * insn) (d : fact) : fact =
+  let add_mapping ll_to_fn ll (sc1 : SymConst.t) (sc2 : SymConst.t) = 
+    match sc1, sc2 with
+    | Const c1, Const c2 -> UidM.add u (SymConst.Const ((ll_to_fn ll) c1 c2)) d
+    | UndefConst, _ | _, UndefConst -> UidM.add u SymConst.UndefConst d
+    | NonConst, _ | _, NonConst -> UidM.add u SymConst.NonConst d
+  in
+
+  let handle_bop_cnd ll_to_fn ll op1 op2 =
+    match op1, op2 with
+    | Const c1, Const c2 ->
+      UidM.add u (SymConst.Const ((ll_to_fn ll) c1 c2)) d
+    | Id id, Const c ->
+      add_mapping ll_to_fn ll (UidM.find id d) (Const c)
+    | Const c, Id id ->
+      add_mapping ll_to_fn ll (Const c) (UidM.find id d) 
+    | Id id1, Id id2 ->
+      add_mapping ll_to_fn ll (UidM.find id1 d) (UidM.find id2 d)
+    | _ -> UidM.add u SymConst.NonConst d
+  in
+
+  match i with
+  | Binop (bop, _, op1, op2) ->
+    handle_bop_cnd bop_to_fn bop op1 op2
+  | Icmp (cnd, _, op1, op2) ->
+    handle_bop_cnd cnd_to_fn cnd op1 op2
+  | Store _ | Call (Void, _, _) -> UidM.add u SymConst.UndefConst d
+  | _ -> UidM.add u SymConst.NonConst d
 
 (* The flow function across terminators is trivial: they never change const info *)
 let terminator_flow (t:terminator) (d:fact) : fact = d

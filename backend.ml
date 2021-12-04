@@ -794,7 +794,7 @@ let potentially_spill (graph : graph) : Ll.uid option =
     Some (fst (UidM.find_first (fun _ -> true) graph))
   else None
 
-let pick_loc (graph : graph) (layout_map : layout_map) (potentially_spilled_uids : UidSet.t) (u : Ll.uid) (next_stk_slot : int) : Alloc.loc =
+let pick_loc (graph : graph) (layout_map : layout_map) (potentially_spilled_uids : UidSet.t) (u : Ll.uid) (next_stk_slot : int) : Alloc.loc * int =
   let open Datastructures in
   let unavailable_regs =
     UidSet.fold (fun u regs ->
@@ -806,9 +806,9 @@ let pick_loc (graph : graph) (layout_map : layout_map) (potentially_spilled_uids
   in
   try
     LocSet.diff caller_save unavailable_regs
-    |> LocSet.find_first (fun _ -> true)
+    |> LocSet.find_first (fun _ -> true), next_stk_slot
   with
-    Not_found -> LStk next_stk_slot
+    Not_found -> LStk next_stk_slot, next_stk_slot + 1
 
 let better_layout (f : Ll.fdecl) (live : liveness) : layout =
   let open Datastructures in
@@ -825,7 +825,8 @@ let better_layout (f : Ll.fdecl) (live : liveness) : layout =
   let graph = build_graph f live in
   let stack, potentially_spilled_uids = simplify_and_spill_loop graph [] UidSet.empty in
   let build_layout_map (layout_map, next_stk_slot : layout_map * int) (u : Ll.uid) : layout_map * int =
-    UidM.add u (pick_loc graph layout_map potentially_spilled_uids u next_stk_slot) layout_map, next_stk_slot + 1
+    let loc, next_stk_slot = pick_loc graph layout_map potentially_spilled_uids u next_stk_slot in
+    UidM.add u loc layout_map, next_stk_slot
   in
   let layout_map, num_stack_slots = List.fold_left build_layout_map (UidM.empty, 0) stack in
   { uid_loc=(fun u -> UidM.find u layout_map); spill_bytes=num_stack_slots * 8 }

@@ -751,17 +751,19 @@ let build_graph (f : Ll.fdecl) (live : liveness) : graph =
   let open Alloc in
 
   let build_graph_uid (graph : graph) (u : Ll.uid) : graph =
-    (* first get set of uids already known to be live simultaneously with u *)
-    let existing_set = UidM.find_or UidSet.empty graph u in
-    (* also get set of uids live after this instruction *)
+    (* get set of uids live after this instruction *)
     let live_set = live.live_out u in
-    (* if u is live, then add edges to all uids in live_set *)
-    let new_set =
-      if UidSet.find_opt u live_set <> None then
-        UidSet.union existing_set live_set
-      else existing_set
+
+    let update_edges (node : Ll.uid) (g : graph) : graph =
+      (* first get set of uids already known to be live simultaneously with node *)
+      let existing_set = UidM.find_or UidSet.empty graph node in
+      (* then add edges to all uids in live_set *)
+      let new_set = UidSet.union existing_set live_set
+      in
+      UidM.add u new_set graph
     in
-    UidM.add u new_set graph
+
+    UidS.fold update_edges live_set graph
   in
 
   let build_graph_block (graph : graph) (block : block) : graph =
@@ -776,11 +778,12 @@ let simplify_graph (graph : graph) (stack : stack) : graph * stack =
   let open Alloc in
 
   let remove_node_if_needed (u : Ll.uid) (nbrs : UidSet.t) (g, stack : graph * stack) : graph * stack =
-    (* remove all edges of a node if at most k-1 edges *)
+    (* remove a node if it has at most k-1 edges *)
     (* where k is the number of (caller-saved) registers *)
     (* stack is for storing removed nodes *)
     if UidSet.cardinal nbrs < LocSet.cardinal caller_save then
-      UidM.remove u g, u :: stack
+      let g' = UidM.map (fun adj -> UidS.remove u adj) g in
+      UidM.remove u g', u :: stack
     else g, stack
   in
 
@@ -790,9 +793,10 @@ let simplify_graph (graph : graph) (stack : stack) : graph * stack =
 let potentially_spill (graph : graph) : Ll.uid option =
   let open Datastructures in
   if not (UidM.is_empty graph) then
-    (* TODO: use metric to decide which node to spill instead of arbitrarilty choosing *)
+    (* TODO: use metric to decide which node to spill instead of arbitrarily choosing *)
     Some (fst (UidM.find_first (fun _ -> true) graph))
   else None
+
 
 let pick_loc (graph : graph) (layout_map : layout_map) (potentially_spilled_uids : UidSet.t) (u : Ll.uid) (next_stk_slot : int) : Alloc.loc * int =
   let open Datastructures in

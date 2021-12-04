@@ -517,14 +517,14 @@ let tests : suite =
     
   ]
   (* Uncomment the following code if you are doing the optional Task IV Register Allocation *)
-   (* 
+   
 @
   [
     Test("ll regalloc correctness tests", pass_all_executed_ll_file ll_tests);
     Test("oat regalloc correctness tests", pass_all_executed_oat_file (oat_correctness_tests @ regalloc_challenge_tests));
     GradedTest("oat regalloc quality tests", 0, quality_oat oat_regalloc_quality_tests);
   ]
-*)
+
   
 
   

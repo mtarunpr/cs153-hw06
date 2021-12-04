@@ -750,7 +750,7 @@ let build_graph (f : Ll.fdecl) (live : liveness) : graph =
   let open Datastructures in
   let open Alloc in
 
-  let build_graph_insn (graph : graph) (u, i : Ll.uid * Ll.insn) : graph =
+  let build_graph_uid (graph : graph) (u : Ll.uid) : graph =
     (* first get set of uids already known to be live simultaneously with u *)
     let existing_set = UidM.find_or UidSet.empty graph u in
     (* also get set of uids live after this instruction *)
@@ -764,11 +764,11 @@ let build_graph (f : Ll.fdecl) (live : liveness) : graph =
     UidM.add u new_set graph
   in
 
-  let build_graph_block (graph : graph) (lbl, block : lbl * block) : graph =
-    List.fold_left build_graph_insn graph block.insns (* TODO: terminator *)
+  let build_graph_block (graph : graph) (block : block) : graph =
+    build_graph_uid (List.fold_left build_graph_uid graph (List.map fst block.insns)) (fst block.term) 
   in
 
-  List.fold_left build_graph_block UidM.empty (snd f.f_cfg) (* TODO: entry block *)
+  List.fold_left build_graph_block (build_graph_block UidM.empty (fst f.f_cfg)) (List.map snd (snd f.f_cfg))
 
 
 let simplify_graph (graph : graph) (stack : stack) : graph * stack =

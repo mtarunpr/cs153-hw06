@@ -743,8 +743,6 @@ let greedy_layout (f:Ll.fdecl) (live:liveness) : layout =
 type graph = Alloc.UidSet.t Datastructures.UidM.t
 (* Store stack of removed nodes as uid list *)
 type stack = Ll.uid list
-(* Store uid to loc function as map *)
-type layout_map = Alloc.loc Datastructures.UidM.t
 
 let build_graph (f : Ll.fdecl) (live : liveness) : graph =
   let open Datastructures in
@@ -798,43 +796,71 @@ let potentially_spill (graph : graph) : Ll.uid option =
   else None
 
 
-let pick_loc (graph : graph) (layout_map : layout_map) (potentially_spilled_uids : UidSet.t) (u : Ll.uid) (next_stk_slot : int) : Alloc.loc * int =
-  let open Datastructures in
-  let unavailable_regs =
-    UidSet.fold (fun u regs ->
-                LocSet.union 
-                    (match UidM.find_opt u layout_map with
-                    | None -> LocSet.empty
-                    | Some x -> LocSet.singleton x)
-                  regs) (UidM.find u graph) LocSet.empty
-  in
-  try
-    LocSet.diff caller_save unavailable_regs
-    |> LocSet.find_first (fun _ -> true), next_stk_slot
-  with
-    Not_found -> LStk next_stk_slot, next_stk_slot + 1
-
-
 let better_layout (f : Ll.fdecl) (live : liveness) : layout =
   let open Datastructures in
 
-  let rec simplify_and_spill_loop (graph : graph) (stack : stack) (potentially_spilled_uids : UidSet.t) : stack * UidSet.t =
-    if UidM.is_empty graph then stack, potentially_spilled_uids
+  let n_arg = ref 0 in
+  let n_spill = ref 0 in
+
+  let spill () = (incr n_spill; Alloc.LStk (- !n_spill)) in
+
+  let pick_loc (graph : graph) (lo : (uid * Alloc.loc) list) (u : Ll.uid) : Alloc.loc =
+    let open Datastructures in
+    let unavailable_regs =
+      UidSet.fold (fun u regs ->
+                  LocSet.union 
+                      (match List.assoc_opt u lo with
+                      | None -> LocSet.empty
+                      | Some x -> LocSet.singleton x)
+                    regs) (UidM.find u graph) LocSet.empty
+    in
+    try
+      LocSet.diff caller_save unavailable_regs
+      |> LocSet.find_first (fun _ -> true)
+    with
+      Not_found -> spill ()
+  in
+
+  let rec simplify_and_spill_loop (graph : graph) (stack : stack) : graph * stack =
+    if UidM.is_empty graph then graph, stack
     else
       let graph, stack = simplify_graph graph stack in
       match potentially_spill graph with
-      | None -> stack, potentially_spilled_uids
-      | Some uid -> simplify_and_spill_loop graph (uid :: stack) (UidSet.add uid potentially_spilled_uids)
+      | None -> graph, stack
+      | Some uid -> simplify_and_spill_loop graph (uid :: stack)
+  in
+  
+  let alloc_arg () =
+    let res =
+      match arg_loc !n_arg with
+      | Alloc.LReg Rcx -> spill ()
+      | x -> x
+    in
+    incr n_arg; res
   in
 
   let graph = build_graph f live in
-  let stack, potentially_spilled_uids = simplify_and_spill_loop graph [] UidSet.empty in
-  let build_layout_map (layout_map, next_stk_slot : layout_map * int) (u : Ll.uid) : layout_map * int =
-    let loc, next_stk_slot = pick_loc graph layout_map potentially_spilled_uids u next_stk_slot in
-    UidM.add u loc layout_map, next_stk_slot
+  let graph, stack = simplify_and_spill_loop graph [] in
+
+  let build_layout_map (lo : (Ll.uid * Alloc.loc) list) (u : Ll.uid) : (Ll.uid * Alloc.loc) list =
+    let loc = pick_loc graph lo u in
+    (u, loc) :: lo
   in
-  let layout_map, num_stack_slots = List.fold_left build_layout_map (UidM.empty, 0) stack in
-  { uid_loc=(fun u -> UidM.find u layout_map); spill_bytes=num_stack_slots * 8 }
+  let layout_map = List.fold_left build_layout_map [] stack in
+
+  let lo =
+    fold_fdecl
+      (fun lo (x, _) -> (x, alloc_arg ()) :: lo)
+      (fun lo l -> (l, Alloc.LLbl (Platform.mangle l)) :: lo)
+      (fun lo (u, i) ->
+        if insn_assigns i 
+        then (u, List.assoc u layout_map) :: lo
+        else (u, Alloc.LVoid) :: lo)
+      (fun lo _ -> lo)
+      [] f in
+  { uid_loc = (fun u -> List.assoc u lo)
+  ; spill_bytes = 8 * !n_spill
+  }
 
 
 (* register allocation options ---------------------------------------------- *)

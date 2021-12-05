@@ -1,3 +1,5 @@
+(* Collaborators: Michael Hwang, Anurag Mitra *)
+
 (* ll ir compilation -------------------------------------------------------- *)
 open Ll
 open Llutil
@@ -770,6 +772,10 @@ let build_graph (f : Ll.fdecl) (live : liveness) : graph =
 
   List.fold_left build_graph_block (build_graph_block UidM.empty (fst f.f_cfg)) (List.map snd (snd f.f_cfg))
 
+let remove_node (graph : graph) (stack : stack) (u : Ll.uid) : graph * stack =
+  let open Datastructures in
+  let graph' = UidM.map (fun adj -> UidS.remove u adj) graph in
+  UidM.remove u graph', u :: stack
 
 let simplify_graph (graph : graph) (stack : stack) : graph * stack =
   let open Datastructures in
@@ -780,8 +786,7 @@ let simplify_graph (graph : graph) (stack : stack) : graph * stack =
     (* where k is the number of (caller-saved) registers *)
     (* stack is for storing removed nodes *)
     if UidSet.cardinal nbrs < LocSet.cardinal caller_save then
-      let g' = UidM.map (fun adj -> UidS.remove u adj) g in
-      UidM.remove u g', u :: stack
+      remove_node g stack u
     else g, stack
   in
 
@@ -827,7 +832,9 @@ let better_layout (f : Ll.fdecl) (live : liveness) : layout =
       let graph, stack = simplify_graph graph stack in
       match potentially_spill graph with
       | None -> graph, stack
-      | Some uid -> simplify_and_spill_loop graph (uid :: stack)
+      | Some uid ->
+        let graph, stack = (remove_node graph stack uid) in
+        simplify_and_spill_loop graph stack
   in
   
   let alloc_arg () =
@@ -840,7 +847,7 @@ let better_layout (f : Ll.fdecl) (live : liveness) : layout =
   in
 
   let graph = build_graph f live in
-  let graph, stack = simplify_and_spill_loop graph [] in
+  let _, stack = simplify_and_spill_loop graph [] in
 
   let build_layout_map (lo : (Ll.uid * Alloc.loc) list) (u : Ll.uid) : (Ll.uid * Alloc.loc) list =
     let loc = pick_loc graph lo u in
@@ -858,7 +865,7 @@ let better_layout (f : Ll.fdecl) (live : liveness) : layout =
         else (u, Alloc.LVoid) :: lo)
       (fun lo _ -> lo)
       [] f in
-  { uid_loc = (fun u -> List.assoc u lo)
+  { uid_loc = (fun u -> try List.assoc u lo with Not_found -> LVoid)
   ; spill_bytes = 8 * !n_spill
   }
 

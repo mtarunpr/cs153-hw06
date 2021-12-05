@@ -752,7 +752,7 @@ let build_graph (f : Ll.fdecl) (live : liveness) : graph =
 
   let build_graph_uid (graph : graph) (u : Ll.uid) : graph =
     (* get set of uids live after this instruction *)
-    let live_set = live.live_out u in
+    let live_set = live.live_in u in
 
     let update_edges (node : Ll.uid) (g : graph) : graph =
       (* first get set of uids already known to be live simultaneously with node *)
@@ -760,7 +760,7 @@ let build_graph (f : Ll.fdecl) (live : liveness) : graph =
       (* then add edges to all uids in live_set *)
       let new_set = UidSet.union existing_set live_set
       in
-      UidM.add u new_set graph
+      UidM.add node new_set g
     in
 
     UidS.fold update_edges live_set graph
@@ -813,6 +813,7 @@ let pick_loc (graph : graph) (layout_map : layout_map) (potentially_spilled_uids
     |> LocSet.find_first (fun _ -> true), next_stk_slot
   with
     Not_found -> LStk next_stk_slot, next_stk_slot + 1
+
 
 let better_layout (f : Ll.fdecl) (live : liveness) : layout =
   let open Datastructures in

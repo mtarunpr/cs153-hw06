@@ -781,11 +781,17 @@ let simplify_graph (graph : graph) (stack : stack) : graph * stack =
   let open Datastructures in
   let open Alloc in
 
+  let pal = LocSet.(caller_save 
+                  |> remove (Alloc.LReg Rax)
+                  |> remove (Alloc.LReg Rcx)                       
+                  )
+  in
+
   let remove_node_if_needed (u : Ll.uid) (nbrs : UidSet.t) (g, stack : graph * stack) : graph * stack =
     (* remove a node if it has at most k-1 edges *)
     (* where k is the number of (caller-saved) registers *)
     (* stack is for storing removed nodes *)
-    if UidSet.cardinal nbrs < LocSet.cardinal caller_save then
+    if UidSet.cardinal nbrs < LocSet.cardinal pal then
       remove_node g stack u
     else g, stack
   in
@@ -819,8 +825,13 @@ let better_layout (f : Ll.fdecl) (live : liveness) : layout =
                       | Some x -> LocSet.singleton x)
                     regs) (UidM.find u graph) LocSet.empty
     in
+    let pal = LocSet.(caller_save 
+                    |> remove (Alloc.LReg Rax)
+                    |> remove (Alloc.LReg Rcx)                       
+                    )
+    in
     try
-      LocSet.diff caller_save unavailable_regs
+      LocSet.diff pal unavailable_regs
       |> LocSet.find_first (fun _ -> true)
     with
       Not_found -> spill ()

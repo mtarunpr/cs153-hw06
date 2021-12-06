@@ -872,7 +872,7 @@ let better_layout (f : Ll.fdecl) (live : liveness) : layout =
       (fun lo l -> (l, Alloc.LLbl (Platform.mangle l)) :: lo)
       (fun lo (u, i) ->
         if insn_assigns i 
-        then (u, List.assoc u layout_map) :: lo
+        then (u, try List.assoc u layout_map with Not_found -> LVoid) :: lo
         else (u, Alloc.LVoid) :: lo)
       (fun lo _ -> lo)
       [] f in

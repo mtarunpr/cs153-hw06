@@ -868,7 +868,7 @@ let better_layout (f : Ll.fdecl) (live : liveness) : layout =
 
   let lo =
     fold_fdecl
-      (fun lo (x, _) -> (x, alloc_arg ()) :: lo)
+      (fun lo (u, _) -> (u, try List.assoc u layout_map with Not_found -> alloc_arg ()) :: lo)
       (fun lo l -> (l, Alloc.LLbl (Platform.mangle l)) :: lo)
       (fun lo (u, i) ->
         if insn_assigns i 

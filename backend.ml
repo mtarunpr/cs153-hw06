@@ -850,11 +850,11 @@ let better_layout (f : Ll.fdecl) (live : liveness) : layout =
   
   let alloc_arg () =
     let res =
-      match arg_loc !n_arg with
+      match arg_loc (!n_arg - 1) with
       | Alloc.LReg Rcx -> spill ()
       | x -> x
     in
-    incr n_arg; res
+    res
   in
 
   let graph = build_graph f live in
@@ -868,7 +868,7 @@ let better_layout (f : Ll.fdecl) (live : liveness) : layout =
 
   let lo =
     fold_fdecl
-      (fun lo (u, _) -> (u, try List.assoc u layout_map with Not_found -> alloc_arg ()) :: lo)
+      (fun lo (u, _) -> (u, try incr n_arg; List.assoc u layout_map with Not_found -> alloc_arg ()) :: lo)
       (fun lo l -> (l, Alloc.LLbl (Platform.mangle l)) :: lo)
       (fun lo (u, i) ->
         if insn_assigns i 

@@ -758,12 +758,12 @@ let build_graph (f : Ll.fdecl) (live : liveness) : graph =
       (* first get set of uids already known to be live simultaneously with node *)
       let existing_set = UidM.find_or UidSet.empty graph node in
       (* then add edges to all uids in live_set *)
-      let new_set = UidSet.union existing_set live_set
+      let new_set = UidSet.union existing_set (UidSet.remove node live_set)
       in
       UidM.add node new_set g
     in
 
-    UidS.fold update_edges live_set graph
+    UidSet.fold update_edges live_set graph
   in
 
   let build_graph_block (graph : graph) (block : block) : graph =
